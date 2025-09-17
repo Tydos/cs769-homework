@@ -39,7 +39,19 @@ def load_embedding(vocab, emb_file, emb_size):
     Return:
         emb: (np.array), embedding matrix of size (|vocab|, emb_size) 
     """
-    raise NotImplementedError()
+    emb = np.random.uniform(-0.05, 0.05, (len(vocab), emb_size)).astype(np.float32)
+    word2idx = getattr(vocab, 'word2idx', vocab)
+    with open(emb_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            values = line.rstrip().split()
+            if len(values) < emb_size + 1:
+                continue
+            word = values[0]
+            if word in word2idx:
+                idx = word2idx[word]
+                vector = np.asarray(values[1:emb_size+1], dtype=np.float32)
+                emb[idx] = vector
+    return emb
 
 
 class DanModel(BaseModel):
@@ -57,21 +69,26 @@ class DanModel(BaseModel):
         Define the model's parameters, e.g., embedding layer, feedforward layer.
         Pass hyperparameters explicitly or use self.args to access the hyperparameters.
         """
-        raise NotImplementedError()
+        self.embedding = nn.Embedding(len(self.vocab), self.args.emb_size)
+        self.fc = nn.Linear(self.args.emb_size, self.tag_size)
 
     def init_model_parameters(self):
         """
         Initialize the model's parameters by uniform sampling from a range [-v, v], e.g., v=0.08
         Pass hyperparameters explicitly or use self.args to access the hyperparameters.
         """
-        raise NotImplementedError()
+        v = 0.05
+        nn.init.uniform_(self.embedding.weight, -v, v)
+        nn.init.uniform_(self.fc.weight, -v, v)
+        nn.init.zeros_(self.fc.bias)
 
     def copy_embedding_from_numpy(self):
         """
         Load pre-trained word embeddings from numpy.array to nn.embedding
         Pass hyperparameters explicitly or use self.args to access the hyperparameters.
         """
-        raise NotImplementedError()
+        emb_matrix = load_embedding(self.vocab, self.args.emb_file, self.args.emb_size)
+        self.embedding.weight.data.copy_(torch.from_numpy(emb_matrix))
 
     def forward(self, x):
         """
@@ -84,4 +101,11 @@ class DanModel(BaseModel):
         Return:
             scores: (torch.FloatTensor), [batch_size, ntags]
         """
-        raise NotImplementedError()
+        emb = self.embedding(x)  # [batch_size, seq_length, emb_size]
+        mask = (x != 0).float().unsqueeze(-1)  # assuming 0 is the padding index
+        emb = emb * mask
+        summed = emb.sum(dim=1)
+        lengths = mask.sum(dim=1).clamp(min=1)
+        avg_emb = summed / lengths
+        scores = self.fc(avg_emb)
+        return scores

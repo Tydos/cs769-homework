@@ -8,6 +8,7 @@ import model as mn
 import numpy as np
 import argparse
 from vocab import Vocab
+from torch.nn.utils.rnn import pad_sequence
 
 
 def get_args():
@@ -79,7 +80,11 @@ def pad_sentences(sents, pad_id):
     Return:
         aug_sents: list(list(int)), |s_1| == |s_i|, for s_i in sents
     """
-    raise NotImplementedError()
+
+    sequences = [torch.tensor(seq) for seq in sents]
+    aug_sents = pad_sequence(sequences, batch_first=True, padding_value=pad_id)
+    return aug_sents
+   
 
 def compute_grad_norm(model, norm_type=2):
     """
@@ -118,6 +123,7 @@ def evaluate(dataset, model, device, tag_vocab=None, filename=None):
         predicts.append(y_pred)
         acc += int(y_pred == tag)
     print(f'  -Accuracy: {acc/len(predicts):.4f} ({acc}/{len(predicts)})')
+    print('\n')
     if filename:
         with open(filename, 'w') as f:
             for y_pred in predicts:
@@ -207,6 +213,7 @@ def main():
     model.load(args.model)
     evaluate(test_data, model, device, tag_vocab, filename=args.test_output)
     evaluate(dev_data, model, device, tag_vocab, filename=args.dev_output)
+    print("END\n")
 
 
 if __name__ == '__main__':
